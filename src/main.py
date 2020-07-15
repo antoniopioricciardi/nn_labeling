@@ -13,9 +13,10 @@ from torchtext.data.utils import ngrams_iterator
 from torchtext.data.utils import get_tokenizer
 from src.embedding_handler import *
 from src.trainer import Trainer
-from src.nn_classifier import NNClassifier, DeepLinear, DoubleLinear
+from src.nn_classifier import NNClassifier, DeepLinear, DoubleLinear, SingleLinear
 
-EMB_PATH = '../embeddings/SPINE_word2vec.txt'
+EMB_PATH = '../embeddings/SPINE_glove.txt'
+# EMB_PATH = '../embeddings/SPINE_word2vec.txt'
 # EMB_PATH = '../embeddings/cc.en.300.vec'
 # EMB_PATH = '../embeddings/word2vec_original_15k_300d_train.txt'
 emb_all = load_embeddings(EMB_PATH)
@@ -36,7 +37,8 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 EMBED_DIM = 1000
 # NUN_CLASS = len(train_dataset.get_labels())
 
-N_EPOCHS = 15
+N_EPOCHS = 1
+N_HIDDEN_LAYERS = 2
 data_path = "./.data/ag_news_csv"
 vocab, word2idx, idx2word, train_dataset, class_distribution, embeddings = create_train_dataset(os.path.join(data_path, 'train.csv'))
 labels_counter = dict()
@@ -46,12 +48,13 @@ labels_counter = dict()
 #     labels_counter[label] += 1
 # print(labels_counter)
 
-tokenizer = get_tokenizer("basic_english")
+# tokenizer = get_tokenizer("basic_english")
 
 batches_list = generate_batches(train_dataset, BATCH_SIZE, embeddings)
-model = NNClassifier(EMBED_DIM, 4, 0.001)
-#model = DeepLinear(EMBED_DIM, 4, 1, 0.1, None)
+# model = NNClassifier(EMBED_DIM, 4, 0.001)
+model = SingleLinear(EMBED_DIM, 4, 1, 0.1, None)
 # model = DoubleLinear(EMBED_DIM, 4, 1, 0.8, None)
+# model = DeepLinear(EMBED_DIM, 4, N_HIDDEN_LAYERS, 0.1, None)
 # I THINK that a high dropout prob leads to a better labeling
 
 train_len = int(len(batches_list)*0.9)
@@ -129,15 +132,20 @@ dim_label_pairs = dict()  # embedding dimension: (label, value)
 # weights_in = model.emb_layer.weight
 
 # influent_weights_in_layer = torch.t(weights_in)  # [1000, 500]
+activation = {}
+def get_activation(name):
+    def hook(model, input, output):
+        activation[name] = output.detach()
+
+    return hook
 
 
 def single_layer_labeling():
     dim_label_pairs = dict()  # embedding dimension: (label, value)
 
-    weights_in = model.emb_layer.weight
-    weights_proj = model.projection_layer.weight
+    weights_in = model.emb_layer.weight  # [500, 1000]
+    weights_proj = model.projection_layer.weight  # [4, 500]
     influent_weights_in_layer = torch.t(weights_in)  # [1000, 500]
-
     www = torch.matmul(influent_weights_in_layer, torch.t(weights_proj))  # [1000, 4]
     for weights_list_idx, weights_list in enumerate(www):
         best_label = torch.argmax(weights_list).item()
@@ -216,30 +224,122 @@ def double_layer_labeling():
         print(top_emb, '--->', labels[pair[0]], '( weight value:', pair[1], ')')
 
 
-#single_layer_labeling()
-#no_hid_layer_labeling()
+def dimension_labeling_deep():
+    dim_label_pairs = dict()  # embedding dimension: (label, value)
+
+    layer_mul = torch.t(model.hidden_layers[0].weight)
+    for i in range(1, N_HIDDEN_LAYERS):
+        next_layer = torch.t(model.hidden_layers[i].weight)
+        layer_mul = torch.matmul(layer_mul, next_layer)
+        print(layer_mul)
+
+    for weights_list_idx, weights_list in enumerate(layer_mul):
+        best_label = torch.argmax(weights_list).item()
+        best_value = weights_list[best_label].item()
+        dim_label_pairs[weights_list_idx] = (best_label, best_value)
+
+    dim_label_pairs = {k: v for k, v in sorted(dim_label_pairs.items(), key=lambda x: x[1][1], reverse=True)}
+
+    for dim, pair in dim_label_pairs.items():
+        print('Dimension:', dim)
+        top_emb = sorted(enumerate(embeddings), key=lambda x: x[1][dim], reverse=True)[:5]
+        top_emb = [(idx2word[emb_idx]) for emb_idx, emb in top_emb]
+        print(top_emb, '--->', labels[pair[0]], '( weight value:', pair[1], ')')
+
+
+def input_word_dimension_labeling_no_hid(word: str):
+    word_idx = word2idx[word]
+    word_emb = np.array(embeddings[word_idx])
+    data = torch.tensor(word_emb).float().to(model.device)
+    pred = torch.argmax(model.forward(data))
+    label = labels[pred]
+    print('Prediction for word:', word, '-', label)
+
+    # print(model.projection_layer.bias)
+    # print(model.emb_layer.bias.shape)
+
+    weights = model.emb_layer.weight[pred]
+    pred_weights = torch.mul(data, weights)
+    sorted_weights, weights_idx = torch.sort(pred_weights, descending=True)
+    for i in range(10):
+        print('Dimension:', weights_idx[i].item(), '--', sorted_weights[i].item())
+        top_emb = sorted(enumerate(embeddings), key=lambda x: x[1][weights_idx[i]], reverse=True)[:10]
+        top_emb = [(idx2word[emb_idx]) for emb_idx, emb in top_emb]
+        print(top_emb)
+
+
+def input_word_dim_labeling_single_hook(word: str):
+    word_idx = word2idx[word]
+    word_emb = np.array(embeddings[word_idx])
+    data = torch.tensor(word_emb).float().to(model.device)
+    model.emb_layer.register_forward_hook(get_activation('emb_layer'))
+    model.projection_layer.register_forward_hook(get_activation('projection_layer'))
+    pred = torch.argmax(model.forward(data))
+    print(activation['emb_layer'])
+    print('\n-----------------\n')
+    print(activation['projection_layer'])
+    print(activation['emb_layer'].shape)
+    print(activation['projection_layer'].shape)
+    label = labels[pred]
+
+def input_word_dimension_labeling_deep(word: str):
+    word_idx = word2idx[word]
+    word_emb = np.array(embeddings[word_idx])
+    data = torch.tensor(word_emb).float().to(model.device)
+    pred = torch.argmax(model.forward(data))
+    label = labels[pred]
+    print('Prediction for word:', word, '-', label)
+    weights = model.hidden_layers[N_HIDDEN_LAYERS - 1].weight[pred]
+    print(weights.shape)
+    exit(33)
+    pred_weights = torch.mul(data, weights)
+    sorted_weights, weights_idx = torch.sort(pred_weights, descending=True)
+    for i in reversed(range(0, N_HIDDEN_LAYERS)):
+        next_layer = model.hidden_layers[i].weight
+        print(next_layer.shape)
+        exit(2)
+        layer_mul = torch.matmul(layer_mul, next_layer)
+        print(layer_mul)
+    exit(5)
+    input_word_dimension_labeling_deep('money')
+
+    for i in range(10):
+        print('Dimension:', weights_idx[i].item(), '--', sorted_weights[i].item())
+        top_emb = sorted(enumerate(embeddings), key=lambda x: x[1][weights_idx[i]], reverse=True)[:10]
+        top_emb = [(idx2word[emb_idx]) for emb_idx, emb in top_emb]
+        print(top_emb)
+# def input_word_dimension_labeling(word: str):
+#     word_idx = word2idx[word]
+#     word_emb = np.array(embeddings[word_idx])
+#     data = torch.tensor(word_emb).float().to(model.device)
+#     pred = torch.argmax(model.forward(data))
+#     label = labels[pred]
+#     print('Prediction for word:', word, '-', label)
+#     weights = model.emb_layer.weight[pred]
+#     pred_weights = torch.mul(data, weights)
+#     sorted_weights, weights_idx = torch.sort(pred_weights, descending=True)
+#     for i in range(10):
+#         print('Dimension:', weights_idx[i].item(), '--', sorted_weights[i].item())
+#         top_emb = sorted(enumerate(embeddings), key=lambda x: x[1][weights_idx[i]], reverse=True)[:10]
+#         top_emb = [(idx2word[emb_idx]) for emb_idx, emb in top_emb]
+#         print(top_emb)
+# for name, param in model.named_parameters():
+#     print(name, param.shape)
+# single_layer_labeling()
+# no_hid_layer_labeling()
 # no_hid_layer_labeling_sum()
 # double_layer_labeling()
+# single_layer_labeling()
+# dimension_labeling_deep()
+input_word_dim_labeling_single_hook('microsoft')
+# input_word_dimension_labeling_no_hid('google')
 
-word = 'heir'
+exit(2)
 # word = 'microsoft'
 # word = 'apple'
 # word = 'macintosh'
 # word = 'labor'
-word_idx = word2idx[word]
-word_emb = np.array(embeddings[word_idx])
-data = torch.tensor(word_emb).float().to(model.device)
-pred = torch.argmax(model.forward(data))
-label = labels[pred]
-print('Prediction for word:', word, '-', label)
-weights = model.emb_layer.weight[pred]
-pred_weights = torch.mul(data, weights)
-sorted_weights, weights_idx = torch.sort(pred_weights, descending=True)
-for i in range(10):
-    print('Dimension:', weights_idx[i].item(), '--', sorted_weights[i].item())
-    top_emb = sorted(enumerate(embeddings), key=lambda x: x[1][weights_idx[i]], reverse=True)[:10]
-    top_emb = [(idx2word[emb_idx]) for emb_idx, emb in top_emb]
-    print(top_emb)
+
 # print(torch.matmul(data, pred_weights))
 
 

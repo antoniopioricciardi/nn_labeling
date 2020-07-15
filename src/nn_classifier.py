@@ -30,7 +30,7 @@ class NNClassifier(nn.Module):
         return x
 
 
-class DeepLinear(nn.Module):
+class SingleLinear(nn.Module):
     def __init__(self,
                  input_dim: int,
                  target_dim: int,
@@ -71,23 +71,32 @@ class DeepLinear(nn.Module):
         # self.batch_norms = nn.ModuleList(
         #     [nn.BatchNorm1d(input_dim) for input_dim in projection_inputs]
         # )
+    def init_weights(self):
+        initrange = 0.5
+        self.emb_layer.weight.data.uniform_(-initrange, initrange)
+        self.projection_layer.weight.data.uniform_(-initrange, initrange)
+        self.emb_layer.bias.data.zero_()
+        self.projection_layer.bias.data.zero_()
 
     def forward(self, data: torch.Tensor) -> torch.Tensor:
         # data = self.batch_norm_in(data) #.transpose(1, 2)).transpose(1, 2)
         # if self.activation is not None:
         #    data = self.activation(data)
         data = self.emb_layer(data)
-        data = self.dropout(data)
         # data = F.relu(data)
 
         # data = self.batch_norm_mid(data) #.transpose(1, 2)).transpose(1, 2)
         # if self.activation is not None:
         #     data = self.activation(data)
         data = F.relu(data)
-        # data = self.dropout(data)
+        data = self.dropout(data)
+
         data = self.projection_layer(data)
+        # data = self.dropout(data)
+
         data = F.relu(data)
         return data
+
     # def forward(self, data: torch.Tensor) -> torch.Tensor:
     #     for projection_layer, batch_norm in zip(self.projection_layers, self.batch_norms):
     #         # TODO: shape check for transpose
@@ -163,3 +172,84 @@ class DoubleLinear(nn.Module):
         data = self.out_layer(data)
         data = F.relu(data)
         return data
+
+
+class DeepLinear(nn.Module):
+    def __init__(self,
+                 input_dim: int,
+                 target_dim: int,
+                 hidden_layers_n: int,
+                 dropout: float,
+                 activation: nn.modules.activation = None,
+                 lr=0.001):
+        super().__init__()
+        assert input_dim > target_dim
+        hidden_inputs = [input_dim // 2 ** i for i in range(0, hidden_layers_n)]
+        hidden_outputs = [input_dim // 2 ** i for i in range(1, hidden_layers_n)] + [target_dim]
+
+        self.hidden_layers = nn.ModuleList(
+            [nn.Linear(input_dim, output_dim)
+             for input_dim, output_dim in zip(hidden_inputs, hidden_outputs)]
+        )
+        self.init_weights()
+        self.dropout = nn.Dropout(p=dropout)
+
+        self.activation = activation
+
+        # self.emb_layer = nn.Linear(input_dim, input_dim // 2)
+        # print(self.emb_layer.weight.shape)
+
+        # self.projection_layer = nn.Linear(input_dim // 2, target_dim)
+        # print(self.projection_layer.weight.shape)
+        # self.batch_norm_in = nn.BatchNorm1d(input_dim)
+        # self.batch_norm_mid = nn.BatchNorm1d(input_dim // 2)
+
+
+        self.loss = torch.nn.CrossEntropyLoss()
+        self.optimizer = torch.optim.Adam(self.parameters(), lr=0.001)
+
+        self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+        self.to(self.device)
+
+        # self.projection_layers = nn.ModuleList(
+        #     [
+        #         nn.Linear(input_dim, output_dim)
+        #         for input_dim, output_dim in zip(projection_inputs, projection_outputs)
+        #     ]
+        # )
+        # self.batch_norms = nn.ModuleList(
+        #     [nn.BatchNorm1d(input_dim) for input_dim in projection_inputs]
+        # )
+
+    def init_weights(self):
+        initrange = 0.5
+        for hidden_layer in self.hidden_layers:
+            hidden_layer.weight.data.uniform_(-initrange, initrange)
+            hidden_layer.bias.data.zero_()
+        #self.emb_layer.weight.data.uniform_(-initrange, initrange)
+        #self.emb_layer.bias.data.zero_()
+
+    def forward(self, data: torch.Tensor) -> torch.Tensor:
+        first = True
+        for hidden_layer in self.hidden_layers:
+            data = F.relu(data)
+
+            data = hidden_layer(data)
+            if first:
+                first = False
+                data = self.dropout(data)
+
+
+        return data
+    # def forward(self, data: torch.Tensor) -> torch.Tensor:
+    #     for projection_layer, batch_norm in zip(self.projection_layers, self.batch_norms):
+    #         # TODO: shape check for transpose
+    #         data = batch_norm(data.transpose(1, 2)).transpose(1, 2)
+    #
+    #         if self.activation is not None:
+    #             data = self.activation(data)
+    #
+    #         data = self.dropout(data)
+    #         data = projection_layer(data)
+    #
+    #     return data
