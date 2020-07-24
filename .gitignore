@@ -1,3 +1,4 @@
 embeddings/
 venv/
 .data/
+.bigger_dataset/

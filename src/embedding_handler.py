@@ -40,11 +40,18 @@ def load_embeddings(filename):
                     break
     return emb_all
 
+
 def preprocess(line):
     label = int(line[:2].replace('"', '')) - 1
     words_list = tokenizer(line[4:].replace('\\', ' ').replace('-', ' '))
     words_list = [w for w in words_list if not w in stop_words and w not in string.punctuation]
     return words_list, label
+
+
+def preproces_bigger_dataset(line):
+    words_list = tokenizer(line.replace('\\', ' ').replace('-', ' '))
+    words_list = [w for w in words_list if not w in stop_words and w not in string.punctuation]
+    return words_list
 
 
 def set_word2idx(word):
@@ -82,13 +89,86 @@ def create_train_dataset(train_path):
                 emb = emb_all.get(word)
                 if emb is not None:  # if there is an embedding for the word
                     vocab.add(word)
-                    add_to_word_class_distribution(word, label)
+                    # add_to_word_class_distribution(word, label)
                     idx = set_word2idx(word)  # get its index
                     # embeddings[idx] = emb  # add the embedding to the dict, in the corresponding index
                     train_words.append(idx)
             train_dataset.append((np.array(train_words), label))
     idx2word = {w: k for k, w in word2idx.items()}
     return vocab, word2idx, idx2word, train_dataset, class_distribution, np.array(embeddings)
+
+def create_train_dataset_bigger(directory):
+    """
+    Text is formatted differently. Each file is a training instance. A file can be formatted with newlines.
+    :param directory:
+    :return:
+    """
+    train_dataset = []
+    labels = []
+    labels_cnt = 0
+    for domain in os.listdir(directory):
+        f_cnt = 0
+        if domain.endswith("Store"):
+            continue
+        labels.append(domain)
+        for f in os.listdir(os.path.join(directory, domain)):
+            if f.endswith(".txt"):
+                #if f_cnt == 500:
+                #    continue
+                #f_cnt += 1
+                with open(os.path.join(directory, domain, f), encoding="utf8") as file:
+                    train_words = []
+                    for line in file:
+                        words_list = preproces_bigger_dataset(line)
+                        for word in words_list:
+                            emb = emb_all.get(word)
+                            if emb is not None:  # if there is an embedding for the word
+                                vocab.add(word)
+                                # add_to_word_class_distribution(word, domain)
+                                idx = set_word2idx(word)  # get its index
+                                # embeddings[idx] = emb  # add the embedding to the dict, in the corresponding index
+                                train_words.append(idx)
+                if train_words:  # if the file is not empty for some reason, then add its preprocessed content to dataset
+                    train_dataset.append((np.array(train_words), labels_cnt))
+        labels_cnt += 1
+
+    idx2word = {w: k for k, w in word2idx.items()}
+    return vocab, word2idx, idx2word, train_dataset, class_distribution, np.array(embeddings), labels
+
+
+def create_dev_dataset_bigger(directory):
+    """
+    Dev dataset
+    Text is formatted differently. Each file is a training instance. A file can be formatted with newlines.
+    :param directory:
+    :return:
+    """
+    dev_dataset = []
+    labels = []
+    labels_cnt = 0
+    for domain in os.listdir(directory):
+        f_cnt = 0
+        if domain.endswith("Store"):
+            continue
+        labels.append(domain)
+        for f in os.listdir(os.path.join(directory, domain)):
+            if f.endswith(".txt"):
+                if f_cnt == 100:
+                    continue
+                f_cnt += 1
+                with open(os.path.join(directory, domain, f), encoding="utf8") as file:
+                    dev_words = []
+                    for line in file:
+                        words_list = preproces_bigger_dataset(line)
+                        for word in words_list:
+                            if word in vocab:
+                                # if we have this word in our vocabulary, then add it to the dev dataset
+                                idx = word2idx[word]
+                                dev_words.append(idx)
+                if dev_words:  # if the file is not empty for some reason, then add its preprocessed content to dataset
+                    dev_dataset.append((np.array(dev_words), labels_cnt))
+        labels_cnt += 1
+    return dev_dataset
 
 
 def get_word_idx(word):
