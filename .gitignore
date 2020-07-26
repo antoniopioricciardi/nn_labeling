@@ -1,4 +1,7 @@
 embeddings/
 venv/
+data/
+bigger_dataset/
+src/__pycache__/
 .data/
-.bigger_dataset/
+.idea/
