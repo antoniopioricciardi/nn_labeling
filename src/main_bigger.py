@@ -14,6 +14,7 @@ from torchtext.data.utils import get_tokenizer
 from src.embedding_handler import *
 from src.trainer import Trainer
 from src.nn_classifier import NNClassifier, DeepLinear, DoubleLinear, SingleLinear
+from src.dimension_operations import Dimension_operations
 
 EMB_PATH = '../embeddings/SPINE_glove.txt'
 # EMB_PATH = '../embeddings/SPINE_word2vec.txt'
@@ -35,7 +36,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 EMBED_DIM = 1000
 # NUN_CLASS = len(train_dataset.get_labels())
 
-N_EPOCHS = 100
+N_EPOCHS = 150
 N_HIDDEN_LAYERS = 2
 # data_path = "./.data/ag_news_csv"
 #vocab, word2idx, idx2word, train_dataset, class_distribution, embeddings = create_train_dataset(os.path.join(data_path, 'train.csv'))
@@ -44,7 +45,7 @@ vocab, word2idx, idx2word, train_dataset, class_distribution, embeddings, labels
 batches_list_train = generate_batches(train_dataset, BATCH_SIZE, embeddings)
 dev_dataset = create_dev_dataset_bigger(os.path.join(os.getcwd(), "../bigger_dataset/DATA/DEV"))
 batches_list_val = generate_batches(dev_dataset, BATCH_SIZE, embeddings)
-# model = NNClassifier(EMBED_DIM, 4, 0.001)
+# model = NNClassifier(EMBED_DIM, 34, 0.001)
 # model = SingleLinear(EMBED_DIM, 34, 1, 0.1, None)
 # model = DoubleLinear(EMBED_DIM, 4, 1, 0.8, None)
 model = DeepLinear(EMBED_DIM, 34, N_HIDDEN_LAYERS, 0.1, None)
@@ -113,6 +114,10 @@ dim_label_pairs = dict()  # embedding dimension: (label, value)
 # weights_in = model.emb_layer.weight
 
 # influent_weights_in_layer = torch.t(weights_in)  # [1000, 500]
+
+dimension_op = Dimension_operations(embeddings, idx2word, word2idx, EMBED_DIM, labels)
+
+
 activation = {}
 def get_activation(name):
     def hook(model, input, output):
@@ -121,6 +126,11 @@ def get_activation(name):
     return hook
 
 
+
+
+
+
+# PENSO SI POSSA BUTTARE TUTTO QUELLO SOTTO
 def single_layer_labeling():
     dim_label_pairs = dict()  # embedding dimension: (label, value)
 
@@ -397,13 +407,14 @@ def emb_all_input_word_dimension_labeling_deep(words: str):
 #     print(name, param.shape)
 # single_layer_labeling()
 # no_hid_layer_labeling()
-# no_hid_layer_labeling_sum()
+no_hid_layer_labeling_sum()
 # double_layer_labeling()
 # single_layer_labeling()
 # dimension_labeling_deep()
 # input_word_dim_labeling_single_hook('microsoft')
 # input_word_dimension_labeling_no_hid('google')
 # input_word_dimension_labeling_deep(emb_all['microsoft'])
+
 '''
 print('\n---------------\n')
 input_word_dimension_labeling_deep('programmer')
@@ -444,7 +455,7 @@ with torch.no_grad():
         mean_emb = np.mean(np.array(emb_list), axis=0)
         data = torch.tensor(mean_emb).float().to(model.device)
         _, dim_idx = torch.sort(data, descending=True)
-        for idx in dim_idx[20:]:
+        for idx in dim_idx[50:]:
             data[idx] = 0.0
         pred = torch.argmax(model.forward(data)).item()
         print(labels[pred], '-', labels[label])

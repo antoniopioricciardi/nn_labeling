@@ -19,3 +19,5 @@ torchtext==0.6.0
 torchvision==0.6.1+cu101
 tqdm==4.47.0
 urllib3==1.25.9
+
+matplotlib~=3.3.0

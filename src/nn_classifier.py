@@ -14,7 +14,7 @@ class NNClassifier(nn.Module):
         # self.loss = nn.MSELoss()
 
         self.loss = torch.nn.CrossEntropyLoss()
-        self.optimizer = torch.optim.Adam(self.parameters(), lr=0.002)
+        self.optimizer = torch.optim.Adam(self.parameters(), lr=lr)
         # self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, 1, gamma=0.9)
 
         self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -232,9 +232,8 @@ class DeepLinear(nn.Module):
     def forward(self, data: torch.Tensor) -> torch.Tensor:
         first = True
         for hidden_layer in self.hidden_layers:
-            data = F.relu(data)
-
             data = hidden_layer(data)
+            data = F.relu(data)
             if first:
                 first = False
                 data = self.dropout(data)

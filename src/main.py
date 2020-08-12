@@ -14,6 +14,7 @@ from torchtext.data.utils import get_tokenizer
 from src.embedding_handler import *
 from src.trainer import Trainer
 from src.nn_classifier import NNClassifier, DeepLinear, DoubleLinear, SingleLinear
+from src.dimension_operations import Dimension_operations
 
 EMB_PATH = '../embeddings/SPINE_glove.txt'
 # EMB_PATH = '../embeddings/SPINE_word2vec.txt'
@@ -132,6 +133,13 @@ dim_label_pairs = dict()  # embedding dimension: (label, value)
 # weights_in = model.emb_layer.weight
 
 # influent_weights_in_layer = torch.t(weights_in)  # [1000, 500]
+
+dimension_op = Dimension_operations(embeddings, idx2word, word2idx, EMBED_DIM, labels)
+#print(dimension_op.dimension_labeling_deep(model, N_HIDDEN_LAYERS))
+dimension_op.input_word_dimension_labeling_deep(model, N_HIDDEN_LAYERS, 'stock')
+exit(33)
+
+
 activation = {}
 def get_activation(name):
     def hook(model, input, output):
@@ -140,6 +148,12 @@ def get_activation(name):
     return hook
 
 
+
+
+
+
+
+# PENSO SI POSSA BUTTARE TUTTO quello sotto
 def single_layer_labeling():
     dim_label_pairs = dict()  # embedding dimension: (label, value)
 
@@ -199,29 +213,29 @@ def no_hid_layer_labeling():
             top_emb = [(idx2word[emb_idx]) for emb_idx, emb in top_emb]
             pprint(top_emb)
 
-
-def double_layer_labeling():
-    dim_label_pairs = dict()  # embedding dimension: (label, value)
-
-    weights_in = model.first_layer.weight  # [500, 1000]
-    weights_sec = model.second_layer.weight  # [100, 500]
-    weights_out = model.out_layer.weight  # [4, 100]
-    influent_weights_in_layer = torch.t(weights_in)  # [1000, 500]
-    print(influent_weights_in_layer.shape)
-    ww1 = torch.matmul(influent_weights_in_layer, torch.t(weights_sec))  # [1000, 100]
-    ww2 = torch.matmul(ww1, torch.t(weights_out))  # [1000, 4]
-    for weights_list_idx, weights_list in enumerate(ww2):
-        best_label = torch.argmax(weights_list).item()
-        best_value = weights_list[best_label].item()
-        dim_label_pairs[weights_list_idx] = (best_label, best_value)
-
-    dim_label_pairs = {k: v for k, v in sorted(dim_label_pairs.items(), key=lambda x: x[1][1], reverse=True)}
-
-    for dim, pair in dim_label_pairs.items():
-        print('Dimension:', dim)
-        top_emb = sorted(enumerate(embeddings), key=lambda x: x[1][dim], reverse=True)[:5]
-        top_emb = [(idx2word[emb_idx]) for emb_idx, emb in top_emb]
-        print(top_emb, '--->', labels[pair[0]], '( weight value:', pair[1], ')')
+#
+# def double_layer_labeling():
+#     dim_label_pairs = dict()  # embedding dimension: (label, value)
+#
+#     weights_in = model.first_layer.weight  # [500, 1000]
+#     weights_sec = model.second_layer.weight  # [100, 500]
+#     weights_out = model.out_layer.weight  # [4, 100]
+#     influent_weights_in_layer = torch.t(weights_in)  # [1000, 500]
+#     print(influent_weights_in_layer.shape)
+#     ww1 = torch.matmul(influent_weights_in_layer, torch.t(weights_sec))  # [1000, 100]
+#     ww2 = torch.matmul(ww1, torch.t(weights_out))  # [1000, 4]
+#     for weights_list_idx, weights_list in enumerate(ww2):
+#         best_label = torch.argmax(weights_list).item()
+#         best_value = weights_list[best_label].item()
+#         dim_label_pairs[weights_list_idx] = (best_label, best_value)
+#
+#     dim_label_pairs = {k: v for k, v in sorted(dim_label_pairs.items(), key=lambda x: x[1][1], reverse=True)}
+#
+#     for dim, pair in dim_label_pairs.items():
+#         print('Dimension:', dim)
+#         top_emb = sorted(enumerate(embeddings), key=lambda x: x[1][dim], reverse=True)[:5]
+#         top_emb = [(idx2word[emb_idx]) for emb_idx, emb in top_emb]
+#         print(top_emb, '--->', labels[pair[0]], '( weight value:', pair[1], ')')
 
 
 def dimension_labeling_deep():
