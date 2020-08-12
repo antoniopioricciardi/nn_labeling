@@ -5,3 +5,4 @@ bigger_dataset/
 src/__pycache__/
 .data/
 .idea/
+src/.data/
