@@ -204,7 +204,6 @@ class DeepLinear(nn.Module):
         # self.batch_norm_in = nn.BatchNorm1d(input_dim)
         # self.batch_norm_mid = nn.BatchNorm1d(input_dim // 2)
 
-
         self.loss = torch.nn.CrossEntropyLoss()
         self.optimizer = torch.optim.Adam(self.parameters(), lr=0.001)
 
@@ -252,3 +251,40 @@ class DeepLinear(nn.Module):
     #         data = projection_layer(data)
     #
     #     return data
+
+
+class ConvNet(nn.Module):
+    def __init__(self):
+        super(ConvNet, self).__init__()
+        self.conv1 = nn.Conv2d(1, 10, kernel_size=5)
+        self.conv2 = nn.Conv2d(10, 20, kernel_size=5)
+        self.conv2_drop = nn.Dropout2d()
+        self.fc1 = nn.Linear(320, 50)
+        self.fc2 = nn.Linear(50, 10)
+
+        # self.loss = F.nll_loss()
+        # self.loss = torch.nn.NLLLoss
+        self.loss = torch.nn.CrossEntropyLoss()
+        self.optimizer = torch.optim.Adam(self.parameters(), lr=0.001)
+
+        self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+        self.to(self.device)
+
+    def forward(self, x):
+        x = F.relu(F.max_pool2d(self.conv1(x), 2))
+        x = F.relu(F.max_pool2d(self.conv2_drop(self.conv2(x)), 2))
+        print(x.shape)
+        x = x.view(-1, 320)
+        x = F.relu(self.fc1(x))
+        x = F.dropout(x, training=self.training)
+        x = F.relu(self.fc2(x))
+        return x
+
+    # def forward(self, x):
+    #     x = F.relu(F.max_pool2d(self.conv1(x), 2))
+    #     x = F.relu(F.max_pool2d(self.conv2_drop(self.conv2(x)), 2))
+    #     x = x.view(-1, 320)
+    #     x = F.relu(self.fc1(x))
+    #     x = F.dropout(x, training=self.training)
+    #     x = self.fc2(x)
+    #     return F.log_softmax(x, -1)
