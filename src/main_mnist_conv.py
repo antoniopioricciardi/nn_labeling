@@ -399,7 +399,7 @@ def plot_conv_activation():
 
     k = 0
     for data_idx in range(5):
-        data = example_data[data_idx + 15].view(1,1,28,28).to(model.device)
+        data = example_data[data_idx + 16].view(1,1,28,28).to(model.device)
 
         # data = example_data[data_idx + 15][0].to(model.device)#.view(784).to(model.device)
 
@@ -411,7 +411,7 @@ def plot_conv_activation():
         pred_vals = model(data)[0]  # single vector batch
         #print(pred_vals)
         pred_index = torch.argmax(pred_vals)
-        # print(pred_index)
+        print(pred_index)
 
         fc1_w = model.fc1.weight  # [500, 1000]
         fc2_w = model.fc2.weight  # [4, 500]
@@ -437,7 +437,6 @@ def plot_conv_activation():
         fc2_w = torch.t(fc2_w)
         mul_weights = torch.matmul(mul_weights, fc2_w)
         mul_weights = mul_weights + model.fc2.bias.div(bias_div)
-        print(mul_weights)
 
         ''''
         We only need to compute "bias_div" once, because the input shape never changes. Therefore each bias
@@ -448,8 +447,13 @@ def plot_conv_activation():
             if val == 0.0:
                 mul_weights[:, idx] = 0.0
 
-        print(mul_weights.shape)
-        heatmap = cv2.resize(torch.t(mul_weights.view)[1], (28,28))
+        heatmap = torch.t(mul_weights)[3].cpu().detach().view(20,16).numpy()
+
+        heatmap = cv2.resize(heatmap, (28, 28))
+        plt.matshow(heatmap)
+        plt.show()
+        exit(15)
+        heatmap = cv2.resize(torch.t(mul_weights)[1], (28,28))
         exit(3)
 
         data = example_data[data_idx + 15][0].view(28, 28)
