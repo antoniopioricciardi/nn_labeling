@@ -3,6 +3,8 @@ import torchvision
 import torch.functional as F
 from scipy.ndimage.filters import gaussian_filter
 
+import cv2
+
 from src.nn_classifier import *
 
 TESTING = True
@@ -445,6 +447,10 @@ def plot_conv_activation():
         for idx, val in enumerate(activated_weights):
             if val == 0.0:
                 mul_weights[:, idx] = 0.0
+
+        print(mul_weights.shape)
+        heatmap = cv2.resize(torch.t(mul_weights.view)[1], (28,28))
+        exit(3)
 
         data = example_data[data_idx + 15][0].view(28, 28)
         print('predicted:', pred_index)
